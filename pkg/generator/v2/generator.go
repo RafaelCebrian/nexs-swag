@@ -138,7 +138,9 @@ func (g *Generator) generateSeparateSpecs() error {
 	return nil
 }
 
-// filterSpecByVisibility creates a new spec containing only operations with the specified visibility.
+// filterSpecByVisibility creates a new spec containing operations based on visibility.
+// - "public": Only operations without x-visibility or x-visibility="public"
+// - "private": All operations (public + private)
 func (g *Generator) filterSpecByVisibility(visibility string) *swagger.Swagger {
 	filteredSpec := &swagger.Swagger{
 		Swagger:             g.spec.Swagger,
@@ -178,18 +180,27 @@ func (g *Generator) filterSpecByVisibility(visibility string) *swagger.Swagger {
 				continue
 			}
 
-			// Check visibility - if not set or empty, include in both
-			opVisibility := ""
+			// Check visibility - if not set or empty, consider as public
+			opVisibility := "public"
 			if op.Extensions != nil {
 				if vis, ok := op.Extensions["x-visibility"].(string); ok {
 					opVisibility = vis
 				}
 			}
 
-			// Include operation if:
-			// 1. No x-visibility set (empty) - include in both specs
-			// 2. x-visibility matches the current visibility filter
-			if opVisibility == "" || opVisibility == visibility {
+			// Include operation based on filter:
+			// - "public" filter: only include operations with visibility "public" (or empty/not set)
+			// - "private" filter: include ALL operations (both public and private)
+			shouldInclude := false
+			if visibility == "private" {
+				// Private spec includes everything
+				shouldInclude = true
+			} else if visibility == "public" {
+				// Public spec only includes public operations
+				shouldInclude = (opVisibility == "public")
+			}
+
+			if shouldInclude {
 				switch method {
 				case "get":
 					filteredPathItem.Get = op

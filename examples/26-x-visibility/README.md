@@ -1,127 +1,192 @@
-# X-Visibility Example
+# Example 26: X-Visibility (OpenAPI 3.1)
 
-This example demonstrates the `@x-visibility` annotation feature that allows you to generate separate OpenAPI documentation files for public and private APIs.
+This example demonstrates the `@x-visibility` annotation feature with **OpenAPI 3.1**, allowing you to generate separate documentation files for public and private APIs.
 
-## Overview
+> **Note**: This example focuses on OpenAPI 3.1. For Swagger 2.0 version, see [Example 27](../27-x-visibility-v2/).
+
+## 📋 Overview
 
 The `@x-visibility` annotation enables you to:
 - Separate public and private endpoints into different OpenAPI files
 - Automatically filter schemas based on usage
 - Maintain a single codebase with dual documentation output
+- Works seamlessly with OpenAPI 3.1's `components.schemas` structure
 
-## How It Works
+## 🎯 Endpoints in This Example
 
-### Annotation Syntax
+### Public Endpoints (appear in both specs):
+- `GET /api/v1/products` - List products (no annotation → defaults to public)
+- `GET /api/v1/products/{id}` - Get product (`@x-visibility public`)
+- `GET /api/v1/health` - Health check (no annotation → defaults to public)
 
-Add `@x-visibility` to your operation comments:
+### Private Endpoints (appear ONLY in private spec):
+- `POST /api/v1/products` - Create product (`@x-visibility private`)
+- `PUT /api/v1/products/{id}` - Update product (`@x-visibility private`)
+- `DELETE /api/v1/products/{id}` - Delete product (`@x-visibility private`)
+- `GET /api/v1/admin/users` - List users (`@x-visibility private`)
+- `DELETE /api/v1/admin/users/{id}` - Delete user (`@x-visibility private`)
 
-```go
-// GetUser godoc
-// @Summary      Get user (public)
-// @Description  Get user details for public consumption
-// @Tags         users
-// @Success      200  {object}  UserPublic
-// @Router       /users/{id} [get]
-// @x-visibility public
-func GetUser(c *gin.Context) {
-    // handler implementation
-}
+### Visibility Logic
+
+**Important**: Private spec includes ALL operations (public + private). Public spec includes only public operations.
+
+## 🚀 Running This Example
+
+### Option 1: Run test script
+```bash
+./run.sh
 ```
 
-### Visibility Options
+### Option 2: Manual generation
+```bash
+nexs-swag init --dir ./ --output ./docs
 
-- `@x-visibility public` - Endpoint appears only in `openapi_public.json`
-- `@x-visibility private` - Endpoint appears only in `openapi_private.json`
-- No annotation - Endpoint appears in **both** files (shared endpoint)
+# Verify public endpoints (should have 3)
+jq '.paths | keys | length' docs/openapi_public.json
 
-## Generated Files
+# Verify private endpoints (should have 5 - includes public)
+jq '.paths | keys | length' docs/openapi_private.json
+```
 
-When using `@x-visibility`, nexs-swag generates:
+## 📊 Expected Results
+
+### Generated Structure:
 
 ```
 docs/
-├── openapi_public.json    # Public API specification
-├── openapi_private.json   # Private API specification
-├── openapi_public.yaml    # Public API (YAML)
-├── openapi_private.yaml   # Private API (YAML)
-├── docs_public.go         # Public API Go code
-└── docs_private.go        # Private API Go code
+├── openapi_public.json     # Public API (3 paths)
+├── openapi_public.yaml
+├── docs_public.go
+├── openapi_private.json    # Complete API (5 paths - includes public)
+├── openapi_private.yaml
+└── docs_private.go
+```
+```json
+{
+  "paths": {
+    "/api/v1/products": {
+      "get": { "summary": "Lista produtos" }
+    },
+    "/api/v1/products/{id}": {
+      "get": { "summary": "Buscar produto" }
+    },
+    "/api/v1/health": {
+      "get": { "summary": "Health check público" }
+    }
+  }
+}
 ```
 
-## Example Structure
+### openapi_private.json deve conter:
+```json
+{
+  "paths": {
+    "/api/v1/products": {
+      "get": { "summary": "Lista produtos" },
+      "post": { "summary": "Criar produto" }
+    },
+    "/api/v1/products/{id}": {
+      "get": { "summary": "Buscar produto" },
+      "put": { "summary": "Atualizar produto" },
+      "delete": { "summary": "Deletar produto" }
+    },
+    "/api/v1/health": {
+      "get": { "summary": "Health check público" }
+    },
+    "/api/v1/admin/users": {
+      "get": { "summary": "Listar usuários" }
+    },
+    "/api/v1/admin/users/{id}": {
+      "delete": { "summary": "Deletar usuário" }
+    }
+  }
+}
+```
 
+## ✅ Validações do Teste
+
+O script `test-visibility.sh` valida:
+
+1. ✅ Arquivos `openapi_public.json` e `openapi_private.json` foram criados
+2. ✅ Número de endpoints no privado >= número de endpoints no público
+3. ✅ Todos os endpoints públicos estão presentes no privado
+4. ✅ Endpoints marcados com `@x-visibility private` aparecem APENAS no privado
+
+## 🎯 Casos de Uso
+
+### 1. API SaaS com plano Free e Premium
+- **Público**: Endpoints do plano gratuito
+- **Privado**: Todos os endpoints (free + premium)
+
+### 2. API com área administrativa
+- **Público**: Endpoints para usuários finais
+- **Privado**: Endpoints públicos + endpoints administrativos
+
+### 3. Documentação para parceiros vs interna
+- **Público**: Endpoints para parceiros externos
+- **Privado**: Todos os endpoints para uso interno
+
+## 📝 Como Usar no Seu Projeto
+
+### Marcar endpoints como públicos:
 ```go
-// Public endpoint - for external consumers
+// Opção 1: Sem annotation (público por padrão)
+// @Router /products [get]
+func ListProducts(w http.ResponseWriter, r *http.Request) { }
+
+// Opção 2: Explicitamente público
+// @Router /products/{id} [get]
 // @x-visibility public
-func GetUser(c *gin.Context) {
-    c.JSON(200, UserPublic{ID: 1, Name: "John"})
-}
+func GetProduct(w http.ResponseWriter, r *http.Request) { }
+```
 
-// Private endpoint - for internal/admin use
+### Marcar endpoints como privados:
+```go
+// @Router /products [post]
+// @Security Bearer
 // @x-visibility private
-func GetUserAdmin(c *gin.Context) {
-    c.JSON(200, UserPrivate{
-        ID: 1, 
-        Name: "John",
-        Email: "john@example.com",
-        Password: "hashed",
-        Role: "admin",
-    })
-}
-
-// Shared endpoint - available to both
-func CreateUser(c *gin.Context) {
-    c.JSON(201, UserPublic{ID: 2, Name: "Jane"})
-}
+func CreateProduct(w http.ResponseWriter, r *http.Request) { }
 ```
 
-## Schema Filtering
-
-Schemas are automatically filtered based on usage:
-
-- **Public spec**: Only includes schemas referenced by public operations (`UserPublic`, `ErrorResponse`)
-- **Private spec**: Only includes schemas referenced by private operations (`UserPrivate`, `ErrorResponse`)
-- Shared schemas appear in both if used by operations without visibility annotations
-
-## Running This Example
-
+### Gerar documentações:
 ```bash
-# Generate documentation
-nexs-swag init --output ./docs --ov 3.1
-
-# Verify separation
-jq '.paths | keys' docs/openapi_public.json
-# Output: ["/users", "/users/{id}"]
-
-jq '.paths | keys' docs/openapi_private.json
-# Output: ["/admin/users/{id}", "/users"]
-
-jq '.components.schemas | keys' docs/openapi_public.json
-# Output: ["ErrorResponse", "UserPublic"]
-
-jq '.components.schemas | keys' docs/openapi_private.json
-# Output: ["ErrorResponse", "UserPrivate", "UserPublic"]
+nexs-swag init --output ./docs
 ```
 
-## Use Cases
+### Servir múltiplas documentações:
+```go
+import (
+    _ "seu-projeto/docs"
+    "github.com/gofiber/swagger"
+)
 
-1. **API Versioning**: Separate stable public APIs from experimental private APIs
-2. **Security**: Hide internal admin endpoints from public documentation
-3. **Client Libraries**: Generate different client SDKs for public vs private APIs
-4. **Documentation Sites**: Host separate documentation for different audiences
-5. **Microservices**: Distinguish between external APIs and inter-service APIs
+// Documentação pública
+app.Get("/swagger-public/*", swagger.New(swagger.Config{
+    URL: "/docs/openapi_public.json",
+}))
 
-## Benefits
+// Documentação privada (com autenticação)
+app.Get("/swagger-private/*", authMiddleware, swagger.New(swagger.Config{
+    URL: "/docs/openapi_private.json",
+}))
+```
 
-- **Single Source of Truth**: Maintain all APIs in one codebase
-- **Automatic Schema Management**: No manual schema duplication
-- **Type Safety**: Same Go types ensure consistency
-- **Selective Exposure**: Control what information is publicly visible
-- **Flexible Deployment**: Choose which spec to publish based on context
+## 🐛 Troubleshooting
 
-## Notes
+### Problema: Endpoints privados aparecendo no público
+- Verifique se você adicionou `@x-visibility private` no endpoint
+- Certifique-se que não há espaços extras na annotation
 
-- Schemas are recursively collected including nested references
-- Operations without `@x-visibility` appear in both specs
-- Shared schemas (like `ErrorResponse`) are included where needed
-- All other OpenAPI features work normally within each spec
+### Problema: Endpoints públicos não aparecem no privado
+- Verifique se a lógica de geração está correta
+- Execute `./test-visibility.sh` para diagnosticar
+
+### Problema: JSON não sendo gerado
+- Verifique se o comando `nexs-swag init` rodou sem erros
+- Confirme que as annotations `@x-visibility` estão corretas
+
+## 📚 Referências
+
+- [Exemplo 07 - Tags Filter](../07-tags-filter/README.md) - Filtrar por tags
+- [Exemplo 16 - Instance Name](../16-instance-name/README.md) - Múltiplas instâncias
+- [OpenAPI 3.1 Extensions](https://spec.openapis.org/oas/v3.1.0#specification-extensions)

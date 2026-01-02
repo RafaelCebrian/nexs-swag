@@ -1,6 +1,8 @@
-# X-Visibility with Swagger 2.0 Example
+# Example 27: X-Visibility (Swagger 2.0)
 
-This example demonstrates the `@x-visibility` annotation feature with Swagger 2.0, allowing you to generate separate documentation files for public and private APIs.
+This example demonstrates the `@x-visibility` annotation feature with **Swagger 2.0**, allowing you to generate separate documentation files for public and private APIs.
+
+> **Note**: This example focuses on Swagger 2.0. For OpenAPI 3.1 version, see [Example 26](../26-x-visibility/).
 
 ## Overview
 
@@ -8,7 +10,7 @@ The `@x-visibility` annotation enables you to:
 - Separate public and private endpoints into different Swagger files
 - Automatically filter schemas (definitions) based on usage
 - Maintain a single codebase with dual documentation output
-- Works with Swagger 2.0 and OpenAPI 3.x
+- Works seamlessly with Swagger 2.0's `definitions` structure
 
 ## How It Works
 
@@ -29,11 +31,13 @@ func GetUser(c *gin.Context) {
 }
 ```
 
-### Visibility Options
+### Visibility Logic
 
-- `@x-visibility public` - Endpoint appears only in `swagger_public.json`
-- `@x-visibility private` - Endpoint appears only in `swagger_private.json`
-- No annotation - Endpoint appears in **both** files (shared endpoint)
+- `@x-visibility public` → Endpoint **only** in `swagger_public.json`
+- `@x-visibility private` → Endpoint **only** in `swagger_private.json`
+- No annotation → Endpoint in **both** files (shared endpoint)
+
+**Important**: Private spec includes ALL operations (public + private). Public spec includes only public operations.
 
 ## Generated Files
 
@@ -42,7 +46,7 @@ When using `@x-visibility` with Swagger 2.0, nexs-swag generates:
 ```
 docs/
 ├── swagger_public.json    # Public API specification
-├── swagger_private.json   # Private API specification
+├── swagger_private.json   # Private API specification (includes public)
 ├── swagger_public.yaml    # Public API (YAML)
 ├── swagger_private.yaml   # Private API (YAML)
 ├── docs_public.go         # Public API Go code
@@ -52,51 +56,73 @@ docs/
 ## Running This Example
 
 ```bash
-# Generate Swagger 2.0 documentation
-nexs-swag init --output ./docs --ov 2.0
-
-# Or use the run script
+# Run the test script
 ./run.sh
 
-# Verify separation
-jq '.paths | keys' docs/swagger_public.json
-# Output: ["/users", "/users/{id}"]
+# Or manually:
+nexs-swag init --output ./docs --ov 2.0
 
-jq '.paths | keys' docs/swagger_private.json
-# Output: ["/admin/users/{id}", "/users"]
+# Verify public endpoints (should have 3)
+jq '.paths | keys | length' docs/swagger_public.json
 
-jq '.definitions | keys' docs/swagger_public.json
-# Output: ["ErrorResponse", "UserPublic"]
-
-jq '.definitions | keys' docs/swagger_private.json
-# Output: ["ErrorResponse", "UserPrivate", "UserPublic"]
+# Verify private endpoints (should have 5 - includes public)
+jq '.paths | keys | length' docs/swagger_private.json
 ```
 
-## Compatibility
+## Test Validation
 
-The `@x-visibility` feature works with:
-- ✅ Swagger 2.0 (this example)
-- ✅ OpenAPI 3.0.x
-- ✅ OpenAPI 3.1.x
-- ✅ OpenAPI 3.2.0
+The `test-visibility.sh` script validates:
+1. ✅ Swagger files are generated
+2. ✅ Public spec has exactly 3 endpoints
+3. ✅ Private spec has exactly 5 endpoints
+4. ✅ All public endpoints exist in private spec (subset validation)
 
-Extensions are preserved during conversion between versions.
+## Endpoints in This Example
+
+| Endpoint | Method | Visibility | Public Spec | Private Spec |
+|----------|--------|------------|-------------|--------------|
+| `/users/{id}` | GET | public | ✅ | ✅ |
+| `/users` | POST | (none) | ✅ | ✅ |
+| `/users/profile` | GET | (none) | ✅ | ✅ |
+| `/admin/users/{id}` | DELETE | private | ❌ | ✅ |
+| `/admin/users/{id}/role` | PUT | private | ❌ | ✅ |
+
+**Result**: 
+- Public spec: 3 endpoints
+- Private spec: 5 endpoints (all of them)
+
+## Swagger 2.0 Specifics
+
+This example uses Swagger 2.0 features:
+- `definitions` instead of `components.schemas`
+- `swagger: "2.0"` version field
+- Different file naming: `swagger_*.json` vs `openapi_*.json`
+
+Schema filtering works identically to OpenAPI 3.x:
+```bash
+# Public definitions (Swagger 2.0)
+jq '.definitions | keys' docs/swagger_public.json
+
+# Private definitions (Swagger 2.0)
+jq '.definitions | keys' docs/swagger_private.json
+```
 
 ## Comparison with OpenAPI 3.x
 
-| Feature | Swagger 2.0 | OpenAPI 3.x |
-|---------|-------------|-------------|
-| Public/Private Separation | ✅ | ✅ |
-| Schema Filtering | ✅ (definitions) | ✅ (components.schemas) |
-| Extension Support | ✅ x-visibility | ✅ x-visibility |
-| File Names | swagger_*.json | openapi_*.json |
+| Feature | Swagger 2.0 (Example 27) | OpenAPI 3.1 (Example 26) |
+|---------|--------------------------|--------------------------|
+| File Names | `swagger_*.json` | `openapi_*.json` |
+| Schemas | `definitions` | `components.schemas` |
+| Version Field | `swagger: "2.0"` | `openapi: "3.1.0"` |
+| Visibility Logic | ✅ Same | ✅ Same |
+| Flag | `--ov 2.0` | `--ov 3.1` (default) |
 
-For OpenAPI 3.x version, see [example 26](../26-x-visibility/).
+Both examples use the **same** visibility filtering logic.
 
 ## Notes
 
-- Schemas (definitions) are recursively collected including nested references
-- Operations without `@x-visibility` appear in both specs
-- Shared schemas (like `ErrorResponse`) are included where needed
-- All other Swagger features work normally within each spec
-- Extensions are automatically converted when switching between OpenAPI versions
+- Schemas (definitions) are automatically filtered based on endpoint usage
+- Private spec includes ALL endpoints (public + private) for complete internal documentation
+- Public spec only includes public endpoints for external API consumers
+- The `@x-visibility` extension is preserved during OpenAPI version conversion
+- All other Swagger 2.0 features work normally within each spec
